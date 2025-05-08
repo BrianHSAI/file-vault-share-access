@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -9,7 +8,7 @@ import { useFiles } from "@/context/FileContext";
 import Navbar from "@/components/Navbar";
 import AccessCodeInput from "@/components/AccessCodeInput";
 import { toast } from "sonner";
-import { Upload } from "lucide-react"; // Fixed import, capitalized Upload
+import { Upload } from "lucide-react";
 
 const FileUpload: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -21,7 +20,13 @@ const FileUpload: React.FC = () => {
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      // Check file size - limit to 50MB to avoid localStorage issues
+      if (selectedFile.size > 50 * 1024 * 1024) {
+        toast.error("Filen er for stor. Maksimum filstørrelse er 50MB.");
+        return;
+      }
+      setFile(selectedFile);
     }
   };
 
@@ -75,9 +80,19 @@ const FileUpload: React.FC = () => {
           ownerId: currentUser?.id || '',
         };
         
-        addFile(fileObj);
-        toast.success("Fil uploadet med succes!");
-        navigate("/dashboard");
+        try {
+          addFile(fileObj);
+          toast.success("Fil uploadet med succes!");
+          navigate("/dashboard");
+        } catch (error) {
+          console.error("Error saving file:", error);
+          if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+            toast.error("Filen er for stor til at blive gemt. Prøv med en mindre fil.");
+          } else {
+            toast.error("Der opstod en fejl ved gemning af filen");
+          }
+          setIsUploading(false);
+        }
       };
       
       reader.onerror = () => {
@@ -87,6 +102,7 @@ const FileUpload: React.FC = () => {
       
       reader.readAsDataURL(file);
     } catch (error) {
+      console.error("Upload error:", error);
       toast.error("Der opstod en fejl ved upload af filen");
       setIsUploading(false);
     }
@@ -119,13 +135,14 @@ const FileUpload: React.FC = () => {
                 <div className="border-2 border-dashed border-gray-300 rounded-md p-6 flex flex-col items-center justify-center">
                   <Upload className="h-12 w-12 text-gray-400 mb-2" />
                   <p className="text-sm text-gray-500 mb-1">Klik for at vælge en fil</p>
-                  <p className="text-xs text-gray-400">PDF, billeder, dokumenter</p>
+                  <p className="text-xs text-gray-400">PDF, billeder, dokumenter, videoer</p>
                   <input
                     id="file"
                     type="file"
                     className="hidden"
                     onChange={handleFileChange}
                     ref={fileInputRef}
+                    accept="image/*,application/pdf,video/*,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
                   />
                   <Button
                     type="button"

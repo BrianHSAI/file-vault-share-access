@@ -45,6 +45,7 @@ const AccessFile: React.FC = () => {
       setAccessedFile(file);
       toast.success("Fil tilgået med succes!");
     } catch (error) {
+      console.error("Error accessing file:", error);
       toast.error("Der opstod en fejl. Prøv igen senere.");
     } finally {
       setIsLoading(false);
@@ -54,15 +55,20 @@ const AccessFile: React.FC = () => {
   const handleDownload = () => {
     if (!accessedFile) return;
 
-    // Create a link element
-    const link = document.createElement('a');
-    link.href = accessedFile.content;
-    link.download = accessedFile.name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      // Create a link element
+      const link = document.createElement('a');
+      link.href = accessedFile.content;
+      link.download = accessedFile.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
-    toast.success("Download påbegyndt!");
+      toast.success("Download påbegyndt!");
+    } catch (error) {
+      console.error("Download error:", error);
+      toast.error("Der opstod en fejl ved download af filen");
+    }
   };
 
   if (accessedFile) {

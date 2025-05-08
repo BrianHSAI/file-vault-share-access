@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, ReactNode } from "react";
 
 export interface AccessCode {
@@ -52,9 +51,14 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   });
 
   const addFile = (file: FileItem) => {
-    const newFiles = [...files, file];
-    setFiles(newFiles);
-    localStorage.setItem("files", JSON.stringify(newFiles));
+    try {
+      const newFiles = [...files, file];
+      setFiles(newFiles);
+      localStorage.setItem("files", JSON.stringify(newFiles));
+    } catch (error) {
+      console.error("Error storing files in localStorage:", error);
+      throw error; // Propagate the error so it can be handled by the upload component
+    }
   };
 
   const deleteFile = (id: string) => {
@@ -76,20 +80,25 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const markCodeAsUsed = (fileId: string, code: string) => {
-    const newFiles = files.map((file) => {
-      if (file.id === fileId) {
-        const newAccessCodes = file.accessCodes.map((accessCode) => {
-          if (accessCode.code === code) {
-            return { ...accessCode, used: true };
-          }
-          return accessCode;
-        });
-        return { ...file, accessCodes: newAccessCodes };
-      }
-      return file;
-    });
-    setFiles(newFiles);
-    localStorage.setItem("files", JSON.stringify(newFiles));
+    try {
+      const newFiles = files.map((file) => {
+        if (file.id === fileId) {
+          const newAccessCodes = file.accessCodes.map((accessCode) => {
+            if (accessCode.code === code) {
+              return { ...accessCode, used: true };
+            }
+            return accessCode;
+          });
+          return { ...file, accessCodes: newAccessCodes };
+        }
+        return file;
+      });
+      setFiles(newFiles);
+      localStorage.setItem("files", JSON.stringify(newFiles));
+    } catch (error) {
+      console.error("Error updating code status:", error);
+      // Don't throw here as this is not critical for the user experience
+    }
   };
 
   const login = async (email: string, password: string): Promise<boolean> => {
