@@ -1,118 +1,106 @@
 
-import React, { useEffect, useState } from "react";
+import React, { useState, useRef, ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useFiles } from "@/context/FileContext";
 import Navbar from "@/components/Navbar";
-import { toast } from "sonner";
 import AccessCodeInput from "@/components/AccessCodeInput";
-import { AccessCode, FileItem } from "@/context/FileContext";
+import { toast } from "sonner";
+import { Upload } from "lucide-react"; // Fixed import, capitalized Upload
 
 const FileUpload: React.FC = () => {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [accessCodes, setAccessCodes] = useState<string[]>(["", "", ""]);
+  const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [accessCodes, setAccessCodes] = useState<string[]>(['', '', '']);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { addFile, currentUser, files } = useFiles();
 
-  useEffect(() => {
-    if (!currentUser) {
-      navigate("/login");
-    }
-  }, [currentUser, navigate]);
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      setSelectedFile(event.target.files[0]);
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
     }
   };
 
-  const handleAccessCodesChange = (newCodes: string[]) => {
-    setAccessCodes(newCodes);
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const validateCodes = () => {
-    // Check for empty codes
-    const hasEmptyCode = accessCodes.some(code => !code.trim());
-    if (hasEmptyCode) {
-      toast.error("Alle adgangskoder skal være udfyldt");
-      return false;
-    }
-
-    // Check for duplicate codes
-    const uniqueCodes = new Set(accessCodes);
-    if (uniqueCodes.size !== accessCodes.length) {
-      toast.error("Adgangskoderne skal være unikke");
-      return false;
-    }
-
-    return true;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!selectedFile) {
-      toast.error("Vælg venligst en fil");
+  const handleUpload = async () => {
+    if (!file) {
+      toast.error("Vælg venligst en fil først");
       return;
     }
 
-    // Check if user has reached file limit
-    const userFiles = files.filter(file => file.ownerId === currentUser?.id);
-    if (userFiles.length >= 15) {
-      toast.error("Du har nået din filgrænse. Køb flere filer for at fortsætte.");
+    // Check if max files limit reached
+    if (currentUser && files.filter(f => f.ownerId === currentUser.id).length >= 15) {
+      toast.error("Du har nået grænsen på 15 filer. Opgrader for at uploade flere.");
       return;
     }
 
-    if (!validateCodes()) {
+    // Validate access codes
+    const validCodes = accessCodes.filter(code => code.trim() !== "");
+    if (validCodes.length === 0) {
+      toast.error("Indtast mindst én adgangskode");
       return;
     }
 
     setIsUploading(true);
 
     try {
-      // Read file as base64
+      // Read file as data URL
       const reader = new FileReader();
+      
       reader.onloadend = () => {
-        const formattedAccessCodes: AccessCode[] = accessCodes.map(code => ({
-          code,
-          used: false
-        }));
-
-        const newFile: FileItem = {
+        const result = reader.result as string;
+        
+        // Create file object
+        const fileObj = {
           id: `file-${Date.now()}`,
-          name: selectedFile.name,
-          uploadDate: new Date().toLocaleDateString(),
-          size: formatFileSize(selectedFile.size),
-          accessCodes: formattedAccessCodes,
-          content: reader.result as string,
-          type: selectedFile.type,
-          ownerId: currentUser?.id || ""
+          name: file.name,
+          uploadDate: new Date().toLocaleDateString('da-DK'),
+          size: formatFileSize(file.size),
+          accessCodes: accessCodes
+            .filter(code => code.trim() !== "")
+            .map(code => ({ code, used: false })),
+          content: result,
+          type: file.type,
+          ownerId: currentUser?.id || '',
         };
-
-        addFile(newFile);
+        
+        addFile(fileObj);
         toast.success("Fil uploadet med succes!");
         navigate("/dashboard");
       };
-
-      reader.readAsDataURL(selectedFile);
+      
+      reader.onerror = () => {
+        toast.error("Der opstod en fejl ved læsning af filen");
+        setIsUploading(false);
+      };
+      
+      reader.readAsDataURL(file);
     } catch (error) {
-      console.error("Upload failed:", error);
-      toast.error("Upload mislykkedes. Prøv igen senere.");
-    } finally {
+      toast.error("Der opstod en fejl ved upload af filen");
       setIsUploading(false);
     }
   };
 
-  const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return bytes + " B";
-    else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
-    else return (bytes / 1048576).toFixed(1) + " MB";
+  const resetFileInput = () => {
+    setFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   if (!currentUser) {
+    navigate("/login");
     return null;
   }
 
@@ -120,79 +108,83 @@ const FileUpload: React.FC = () => {
     <div className="min-h-screen flex flex-col bg-slate-50">
       <Navbar />
       <div className="flex-grow flex items-center justify-center px-4 py-12">
-        <Card className="w-full max-w-xl">
+        <Card className="w-full max-w-2xl">
           <CardHeader>
-            <CardTitle className="text-2xl text-center">Upload Fil</CardTitle>
+            <CardTitle className="text-2xl">Upload Fil</CardTitle>
           </CardHeader>
-          <form onSubmit={handleSubmit}>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="file">Vælg fil</Label>
-                <div className="border-2 border-dashed border-slate-300 rounded-md p-8 text-center hover:border-blue-500 transition-colors">
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="file">Vælg fil</Label>
+              {!file ? (
+                <div className="border-2 border-dashed border-gray-300 rounded-md p-6 flex flex-col items-center justify-center">
+                  <Upload className="h-12 w-12 text-gray-400 mb-2" />
+                  <p className="text-sm text-gray-500 mb-1">Klik for at vælge en fil</p>
+                  <p className="text-xs text-gray-400">PDF, billeder, dokumenter</p>
                   <input
                     id="file"
                     type="file"
                     className="hidden"
                     onChange={handleFileChange}
+                    ref={fileInputRef}
                   />
-                  <label htmlFor="file" className="cursor-pointer">
-                    {selectedFile ? (
-                      <div>
-                        <p className="font-medium text-blue-600">{selectedFile.name}</p>
-                        <p className="mt-1 text-sm text-slate-500">
-                          {formatFileSize(selectedFile.size)}
-                        </p>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="mt-2"
-                          onClick={() => setSelectedFile(null)}
-                        >
-                          Skift fil
-                        </Button>
-                      </div>
-                    ) : (
-                      <div>
-                        <upload className="mx-auto h-12 w-12 text-slate-400" />
-                        <p className="mt-2 text-slate-700">
-                          Klik for at vælge en fil eller træk den hertil
-                        </p>
-                        <p className="mt-1 text-sm text-slate-500">
-                          Alle filtyper understøttes
-                        </p>
-                      </div>
-                    )}
-                  </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-4"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    Vælg Fil
+                  </Button>
                 </div>
-              </div>
+              ) : (
+                <div className="border rounded-md p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{file.name}</p>
+                      <p className="text-sm text-gray-500">{formatFileSize(file.size)}</p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={resetFileInput}
+                    >
+                      Skift fil
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
 
-              <div className="space-y-2">
-                <Label>Adgangskoder (3 unikke koder)</Label>
-                <p className="text-sm text-slate-500 mb-2">
-                  Hver kode kan kun bruges én gang til at få adgang til filen.
+            {file && (
+              <div className="space-y-4">
+                <Label>Adgangskoder</Label>
+                <AccessCodeInput
+                  codes={accessCodes}
+                  onChange={setAccessCodes}
+                  maxCodes={3}
+                />
+                <p className="text-xs text-gray-500">
+                  Tilføj op til 3 adgangskoder. Hver adgangskode kan kun bruges én gang.
                 </p>
-                <AccessCodeInput codes={accessCodes} onChange={handleAccessCodesChange} />
               </div>
-            </CardContent>
-            <CardFooter className="flex justify-between">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => navigate("/dashboard")}
-                disabled={isUploading}
-              >
-                Annuller
-              </Button>
-              <Button
-                type="submit"
-                className="bg-blue-600 hover:bg-blue-700"
-                disabled={isUploading || !selectedFile}
-              >
-                {isUploading ? "Uploader..." : "Upload Fil"}
-              </Button>
-            </CardFooter>
-          </form>
+            )}
+          </CardContent>
+          <CardFooter className="flex justify-between">
+            <Button
+              variant="outline"
+              onClick={() => navigate("/dashboard")}
+              disabled={isUploading}
+            >
+              Annuller
+            </Button>
+            <Button
+              onClick={handleUpload}
+              disabled={!file || isUploading}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isUploading ? "Uploader..." : "Upload Fil"}
+            </Button>
+          </CardFooter>
         </Card>
       </div>
     </div>

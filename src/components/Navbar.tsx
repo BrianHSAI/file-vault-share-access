@@ -16,7 +16,7 @@ const Navbar: React.FC = () => {
   return (
     <nav className="bg-slate-800 text-white p-4 flex justify-between items-center shadow-md">
       <div className="flex items-center space-x-2">
-        <h1 className="text-xl font-bold cursor-pointer" onClick={() => navigate("/")}>FileVault</h1>
+        <h1 className="text-xl font-bold cursor-pointer" onClick={() => navigate("/")}>Eksfiler</h1>
       </div>
       <div className="flex gap-4">
         {currentUser ? (
@@ -25,7 +25,7 @@ const Navbar: React.FC = () => {
               Dashboard
             </Button>
             <Button variant="ghost" onClick={() => navigate("/upload")}>
-              Upload File
+              Upload Fil
             </Button>
             <Button variant="ghost" onClick={handleLogout}>
               Log Out
@@ -37,7 +37,7 @@ const Navbar: React.FC = () => {
               Log In
             </Button>
             <Button variant="ghost" onClick={() => navigate("/access")}>
-              Access Files
+              Få Adgang til Filer
             </Button>
           </>
         )}

@@ -51,7 +51,7 @@ const Index: React.FC = () => {
       </div>
       <footer className="bg-slate-800 text-slate-300 p-6">
         <div className="max-w-7xl mx-auto text-center">
-          <p>© 2025 FileVault. Alle rettigheder forbeholdes.</p>
+          <p>© 2025 Eksfiler. Alle rettigheder forbeholdes.</p>
         </div>
       </footer>
     </div>
