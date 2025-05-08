@@ -8,10 +8,10 @@ import { File, Trash } from "lucide-react";
 interface FileCardProps {
   file: FileItem;
   onDelete: (id: string) => void;
-  onView: (id: string) => void;
+  onClick: (id: string) => void; // Changed from onView to onClick to match Dashboard.tsx
 }
 
-const FileCard: React.FC<FileCardProps> = ({ file, onDelete, onView }) => {
+const FileCard: React.FC<FileCardProps> = ({ file, onDelete, onClick }) => {
   const usedCodes = file.accessCodes.filter((code) => code.used).length;
   const totalCodes = file.accessCodes.length;
 
@@ -54,7 +54,7 @@ const FileCard: React.FC<FileCardProps> = ({ file, onDelete, onView }) => {
         </div>
       </CardContent>
       <CardFooter className="flex justify-between pt-2">
-        <Button variant="outline" size="sm" onClick={() => onView(file.id)}>
+        <Button variant="outline" size="sm" onClick={() => onClick(file.id)}>
           View
         </Button>
         <Button 
