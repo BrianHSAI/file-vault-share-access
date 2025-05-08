@@ -9,6 +9,7 @@ import { useFiles } from "@/context/FileContext";
 import Navbar from "@/components/Navbar";
 import { toast } from "sonner";
 import { FileItem } from "@/context/FileContext";
+import { Download } from "lucide-react";
 
 const AccessFile: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -50,41 +51,18 @@ const AccessFile: React.FC = () => {
     }
   };
 
-  const renderFilePreview = () => {
-    if (!accessedFile) return null;
+  const handleDownload = () => {
+    if (!accessedFile) return;
 
-    if (accessedFile.type.startsWith("image/")) {
-      return (
-        <div className="flex justify-center p-4 bg-white rounded-md">
-          <img 
-            src={accessedFile.content} 
-            alt={accessedFile.name} 
-            className="max-w-full max-h-[500px] object-contain"
-          />
-        </div>
-      );
-    } else if (accessedFile.type === "application/pdf") {
-      return (
-        <div className="h-[600px] w-full">
-          <iframe 
-            src={accessedFile.content}
-            className="w-full h-full border-0 rounded-md"
-            title={accessedFile.name}
-          />
-        </div>
-      );
-    } else {
-      return (
-        <div className="p-8 text-center bg-gray-50 rounded-md">
-          <p className="text-lg font-medium">
-            Forhåndsvisning er ikke tilgængelig for denne filtype
-          </p>
-          <p className="text-gray-500 mt-2">
-            {accessedFile.name} ({accessedFile.type})
-          </p>
-        </div>
-      );
-    }
+    // Create a link element
+    const link = document.createElement('a');
+    link.href = accessedFile.content;
+    link.download = accessedFile.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast.success("Download påbegyndt!");
   };
 
   if (accessedFile) {
@@ -107,18 +85,28 @@ const AccessFile: React.FC = () => {
             </Button>
           </div>
 
-          <div className="max-w-3xl mx-auto">
+          <div className="max-w-md mx-auto">
             <Card>
               <CardHeader>
-                <CardTitle>Forhåndsvisning</CardTitle>
+                <CardTitle className="text-center">Fil Tilgængelig</CardTitle>
               </CardHeader>
-              <CardContent>
-                {renderFilePreview()}
+              <CardContent className="flex flex-col items-center gap-4 pt-4">
+                <div className="text-center mb-4">
+                  <p className="text-lg mb-2">Din fil er klar til download</p>
+                  <p className="text-sm text-gray-500">{accessedFile.name} ({accessedFile.type})</p>
+                  <p className="text-sm text-gray-500 mt-1">{accessedFile.size}</p>
+                </div>
+                <Button 
+                  onClick={handleDownload} 
+                  className="w-full bg-blue-600 hover:bg-blue-700 flex items-center justify-center gap-2"
+                >
+                  <Download size={20} />
+                  Download Fil
+                </Button>
               </CardContent>
-              <CardFooter className="flex justify-center">
-                <p className="text-sm text-gray-500">
-                  Denne fil kan kun ses i browseren og kan ikke downloades.
-                  Adgangskoden er nu brugt og kan ikke bruges igen.
+              <CardFooter className="flex justify-center pt-4">
+                <p className="text-sm text-gray-500 text-center">
+                  Denne adgangskode er nu brugt og kan ikke bruges igen.
                 </p>
               </CardFooter>
             </Card>
@@ -166,7 +154,7 @@ const AccessFile: React.FC = () => {
                 className="w-full bg-blue-600 hover:bg-blue-700"
                 disabled={isLoading}
               >
-                {isLoading ? "Henter fil..." : "Vis Fil"}
+                {isLoading ? "Henter fil..." : "Få adgang"}
               </Button>
             </CardFooter>
           </form>
