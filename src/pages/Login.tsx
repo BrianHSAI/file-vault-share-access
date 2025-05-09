@@ -8,13 +8,15 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { useFiles } from "@/context/FileContext";
 import Navbar from "@/components/Navbar";
 import { toast } from "sonner";
+import { RefreshCw } from "lucide-react";
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const navigate = useNavigate();
-  const { login } = useFiles();
+  const { login, syncData } = useFiles();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +38,18 @@ const Login: React.FC = () => {
       toast.error("Der opstod en fejl. Prøv igen senere.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSync = () => {
+    setIsSyncing(true);
+    try {
+      syncData();
+      toast.success("Data synkroniseret!");
+    } catch (error) {
+      toast.error("Synkronisering mislykkedes");
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -79,6 +93,19 @@ const Login: React.FC = () => {
               >
                 {isLoading ? "Logger ind..." : "Log ind"}
               </Button>
+              <div className="flex items-center justify-center w-full">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                  onClick={handleSync}
+                  disabled={isSyncing}
+                >
+                  <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                  Synkroniser data
+                </Button>
+              </div>
               <p className="text-center text-sm">
                 Har du ikke en konto?{" "}
                 <Link to="/signup" className="text-blue-600 hover:underline">

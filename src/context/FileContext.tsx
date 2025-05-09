@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+
+import React, { createContext, useContext, useState, ReactNode, useEffect } from "react";
 
 export interface AccessCode {
   code: string;
@@ -16,6 +17,12 @@ export interface FileItem {
   ownerId: string;
 }
 
+interface User {
+  id: string;
+  email: string;
+  password: string;
+}
+
 interface FileContextType {
   files: FileItem[];
   addFile: (file: FileItem) => void;
@@ -27,7 +34,58 @@ interface FileContextType {
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   signup: (email: string, password: string) => Promise<boolean>;
+  userCount: number;
+  syncData: () => void;
 }
+
+// Mock server API
+const API = {
+  getUsers: (): User[] => {
+    try {
+      const usersString = localStorage.getItem("global_users");
+      return usersString ? JSON.parse(usersString) : [];
+    } catch (error) {
+      console.error("Error retrieving users:", error);
+      return [];
+    }
+  },
+  
+  saveUsers: (users: User[]): void => {
+    try {
+      localStorage.setItem("global_users", JSON.stringify(users));
+    } catch (error) {
+      console.error("Error saving users:", error);
+    }
+  },
+  
+  getFiles: (): FileItem[] => {
+    try {
+      const filesString = localStorage.getItem("global_files");
+      return filesString ? JSON.parse(filesString) : [];
+    } catch (error) {
+      console.error("Error retrieving files:", error);
+      return [];
+    }
+  },
+  
+  saveFiles: (files: FileItem[]): void => {
+    try {
+      localStorage.setItem("global_files", JSON.stringify(files));
+    } catch (error) {
+      console.error("Error saving files:", error);
+    }
+  },
+
+  getUserFiles: (userId: string): FileItem[] => {
+    try {
+      const allFiles = API.getFiles();
+      return allFiles.filter(file => file.ownerId === userId);
+    } catch (error) {
+      console.error("Error retrieving user files:", error);
+      return [];
+    }
+  }
+};
 
 const FileContext = createContext<FileContextType | undefined>(undefined);
 
@@ -40,39 +98,93 @@ export const useFiles = () => {
 };
 
 export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [files, setFiles] = useState<FileItem[]>(() => {
-    const savedFiles = localStorage.getItem("files");
-    return savedFiles ? JSON.parse(savedFiles) : [];
-  });
-  
-  const [currentUser, setCurrentUser] = useState<{ id: string; email: string } | null>(() => {
-    const savedUser = localStorage.getItem("currentUser");
-    return savedUser ? JSON.parse(savedUser) : null;
-  });
+  const [files, setFiles] = useState<FileItem[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [currentUser, setCurrentUser] = useState<{ id: string; email: string } | null>(null);
+
+  // Initial data load
+  useEffect(() => {
+    syncData();
+    
+    // Try to restore user session
+    const savedUserString = localStorage.getItem("current_session");
+    if (savedUserString) {
+      try {
+        const savedUser = JSON.parse(savedUserString);
+        setCurrentUser(savedUser);
+        
+        // Load user files
+        if (savedUser && savedUser.id) {
+          const userFiles = API.getUserFiles(savedUser.id);
+          setFiles(userFiles);
+        }
+      } catch (error) {
+        console.error("Error restoring session:", error);
+      }
+    }
+  }, []);
+
+  // Sync data between devices and update UI when current user changes
+  useEffect(() => {
+    if (currentUser) {
+      const userFiles = API.getUserFiles(currentUser.id);
+      setFiles(userFiles);
+    } else {
+      setFiles([]);
+    }
+  }, [currentUser]);
+
+  const syncData = () => {
+    const fetchedUsers = API.getUsers();
+    setUsers(fetchedUsers);
+    
+    if (currentUser) {
+      const userFiles = API.getUserFiles(currentUser.id);
+      setFiles(userFiles);
+    }
+  };
 
   const addFile = (file: FileItem) => {
     try {
-      const newFiles = [...files, file];
-      setFiles(newFiles);
-      localStorage.setItem("files", JSON.stringify(newFiles));
+      const allFiles = API.getFiles();
+      const newFiles = [...allFiles, file];
+      API.saveFiles(newFiles);
+      
+      // Update local state with only user's files
+      if (currentUser) {
+        const updatedUserFiles = API.getUserFiles(currentUser.id);
+        setFiles(updatedUserFiles);
+      }
     } catch (error) {
-      console.error("Error storing files in localStorage:", error);
-      throw error; // Propagate the error so it can be handled by the upload component
+      console.error("Error storing files:", error);
+      throw error;
     }
   };
 
   const deleteFile = (id: string) => {
-    const newFiles = files.filter((file) => file.id !== id);
-    setFiles(newFiles);
-    localStorage.setItem("files", JSON.stringify(newFiles));
+    try {
+      const allFiles = API.getFiles();
+      const newFiles = allFiles.filter((file) => file.id !== id);
+      API.saveFiles(newFiles);
+      
+      // Update local state
+      if (currentUser) {
+        const updatedUserFiles = API.getUserFiles(currentUser.id);
+        setFiles(updatedUserFiles);
+      }
+    } catch (error) {
+      console.error("Error deleting file:", error);
+    }
   };
 
   const getFileById = (id: string) => {
-    return files.find((file) => file.id === id);
+    const allFiles = API.getFiles();
+    return allFiles.find((file) => file.id === id);
   };
 
   const getFileByAccessCode = (code: string, email: string) => {
-    return files.find((file) => 
+    const allFiles = API.getFiles();
+    return allFiles.find((file) => 
       file.accessCodes.some(accessCode => 
         accessCode.code === code && !accessCode.used
       )
@@ -81,7 +193,8 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const markCodeAsUsed = (fileId: string, code: string) => {
     try {
-      const newFiles = files.map((file) => {
+      const allFiles = API.getFiles();
+      const newFiles = allFiles.map((file) => {
         if (file.id === fileId) {
           const newAccessCodes = file.accessCodes.map((accessCode) => {
             if (accessCode.code === code) {
@@ -93,22 +206,32 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
         return file;
       });
-      setFiles(newFiles);
-      localStorage.setItem("files", JSON.stringify(newFiles));
+      
+      API.saveFiles(newFiles);
+      
+      // Update local state if necessary
+      if (currentUser) {
+        const updatedUserFiles = API.getUserFiles(currentUser.id);
+        setFiles(updatedUserFiles);
+      }
     } catch (error) {
       console.error("Error updating code status:", error);
-      // Don't throw here as this is not critical for the user experience
     }
   };
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    // Simulate API call
-    const users = JSON.parse(localStorage.getItem("users") || "[]");
-    const user = users.find((u: any) => u.email === email && u.password === password);
+    const allUsers = API.getUsers();
+    const user = allUsers.find((u) => u.email === email && u.password === password);
     
     if (user) {
-      setCurrentUser({ id: user.id, email: user.email });
-      localStorage.setItem("currentUser", JSON.stringify({ id: user.id, email: user.email }));
+      const userSession = { id: user.id, email: user.email };
+      setCurrentUser(userSession);
+      localStorage.setItem("current_session", JSON.stringify(userSession));
+      
+      // Load user files
+      const userFiles = API.getUserFiles(user.id);
+      setFiles(userFiles);
+      
       return true;
     }
     return false;
@@ -116,24 +239,32 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = () => {
     setCurrentUser(null);
-    localStorage.removeItem("currentUser");
+    setFiles([]);
+    localStorage.removeItem("current_session");
   };
 
   const signup = async (email: string, password: string): Promise<boolean> => {
-    // Simulate API call
-    const users = JSON.parse(localStorage.getItem("users") || "[]");
-    const userExists = users.some((u: any) => u.email === email);
+    const allUsers = API.getUsers();
+    const userExists = allUsers.some((u) => u.email === email);
     
     if (userExists) {
       return false;
     }
     
     const newUser = { id: `user-${Date.now()}`, email, password };
-    users.push(newUser);
-    localStorage.setItem("users", JSON.stringify(users));
+    const updatedUsers = [...allUsers, newUser];
     
-    setCurrentUser({ id: newUser.id, email: newUser.email });
-    localStorage.setItem("currentUser", JSON.stringify({ id: newUser.id, email: newUser.email }));
+    // Save to "server"
+    API.saveUsers(updatedUsers);
+    
+    // Update local state
+    setUsers(updatedUsers);
+    
+    // Auto login
+    const userSession = { id: newUser.id, email: newUser.email };
+    setCurrentUser(userSession);
+    localStorage.setItem("current_session", JSON.stringify(userSession));
+    
     return true;
   };
 
@@ -147,7 +278,9 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     currentUser,
     login,
     logout,
-    signup
+    signup,
+    userCount: users.length,
+    syncData
   };
 
   return <FileContext.Provider value={value}>{children}</FileContext.Provider>;

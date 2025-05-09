@@ -1,36 +1,73 @@
 
-import React from "react";
+import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { useFiles } from "@/context/FileContext";
 import Navbar from "@/components/Navbar";
 import FileCard from "@/components/FileCard";
-import { Upload } from "lucide-react"; // Fixed import, capitalized Upload
+import { Upload, RefreshCw, Users } from "lucide-react";
+import { toast } from "sonner";
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { files, currentUser, deleteFile } = useFiles();
+  const { files, currentUser, deleteFile, syncData, userCount } = useFiles();
 
   // Filter files by current user
   const userFiles = files.filter(file => file.ownerId === currentUser?.id);
 
+  useEffect(() => {
+    if (!currentUser) {
+      navigate("/login");
+    }
+  }, [currentUser, navigate]);
+
   const handleDelete = (fileId: string) => {
     deleteFile(fileId);
   };
+
+  const handleSync = () => {
+    try {
+      syncData();
+      toast.success("Data synkroniseret!");
+    } catch (error) {
+      toast.error("Synkronisering mislykkedes");
+    }
+  };
+
+  if (!currentUser) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       <Navbar />
       <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">Mine Filer</h1>
-          <Button 
-            onClick={() => navigate("/upload")}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            <Upload className="mr-2 h-4 w-4" /> Upload Fil
-          </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Mine Filer</h1>
+            <div className="flex items-center gap-2 text-sm text-slate-500 mt-1">
+              <Users className="h-4 w-4" />
+              <span>{userCount} registrerede brugere</span>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2"
+              onClick={handleSync}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Synkroniser
+            </Button>
+            <Button 
+              onClick={() => navigate("/upload")}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <Upload className="mr-2 h-4 w-4" /> Upload Fil
+            </Button>
+          </div>
         </div>
 
         {userFiles.length === 0 ? (
