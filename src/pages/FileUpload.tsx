@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ const FileUpload: React.FC = () => {
       // Check file size - limit to 50MB to avoid localStorage issues
       if (selectedFile.size > 50 * 1024 * 1024) {
         toast.error("Filen er for stor. Maksimum filstørrelse er 50MB.");
+        resetFileInput();
         return;
       }
       setFile(selectedFile);
@@ -41,6 +43,13 @@ const FileUpload: React.FC = () => {
   const handleUpload = async () => {
     if (!file) {
       toast.error("Vælg venligst en fil først");
+      return;
+    }
+
+    // Double-check file size again before upload
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error("Filen er for stor. Maksimum filstørrelse er 50MB.");
+      resetFileInput();
       return;
     }
 
