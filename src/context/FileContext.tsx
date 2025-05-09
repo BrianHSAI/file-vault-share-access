@@ -12,7 +12,7 @@ export interface FileItem {
   uploadDate: string;
   size: string;
   accessCodes: AccessCode[];
-  content: string; // Base64 encoded file content
+  content: string; // Base64 encoded file content or URL for links
   type: string;
   ownerId: string;
 }
@@ -21,6 +21,8 @@ interface User {
   id: string;
   email: string;
   password: string;
+  provider?: string; // 'google', 'microsoft', or undefined for regular login
+  providerUserId?: string;
 }
 
 interface FileContextType {
@@ -30,8 +32,9 @@ interface FileContextType {
   getFileById: (id: string) => FileItem | undefined;
   getFileByAccessCode: (code: string, email: string) => FileItem | undefined;
   markCodeAsUsed: (fileId: string, code: string) => void;
-  currentUser: { id: string; email: string } | null;
+  currentUser: { id: string; email: string; provider?: string } | null;
   login: (email: string, password: string) => Promise<boolean>;
+  loginWithProvider: (provider: string, userData: { id: string, email: string }) => Promise<boolean>;
   logout: () => void;
   signup: (email: string, password: string) => Promise<boolean>;
   userCount: number;
@@ -100,7 +103,7 @@ export const useFiles = () => {
 export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [currentUser, setCurrentUser] = useState<{ id: string; email: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; email: string; provider?: string } | null>(null);
 
   // Initial data load
   useEffect(() => {
@@ -224,7 +227,12 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const user = allUsers.find((u) => u.email === email && u.password === password);
     
     if (user) {
-      const userSession = { id: user.id, email: user.email };
+      const userSession = { 
+        id: user.id, 
+        email: user.email,
+        provider: user.provider
+      };
+      
       setCurrentUser(userSession);
       localStorage.setItem("current_session", JSON.stringify(userSession));
       
@@ -235,6 +243,44 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return true;
     }
     return false;
+  };
+
+  const loginWithProvider = async (provider: string, userData: { id: string, email: string }): Promise<boolean> => {
+    const allUsers = API.getUsers();
+    let user = allUsers.find((u) => 
+      u.provider === provider && u.providerUserId === userData.id
+    );
+    
+    // If user doesn't exist with this provider, create a new one
+    if (!user) {
+      user = { 
+        id: `user-${Date.now()}`, 
+        email: userData.email,
+        password: "", // No password for social login
+        provider,
+        providerUserId: userData.id
+      };
+      
+      const updatedUsers = [...allUsers, user];
+      API.saveUsers(updatedUsers);
+      setUsers(updatedUsers);
+    }
+    
+    // Set user session
+    const userSession = { 
+      id: user.id, 
+      email: user.email,
+      provider: user.provider
+    };
+    
+    setCurrentUser(userSession);
+    localStorage.setItem("current_session", JSON.stringify(userSession));
+    
+    // Load user files
+    const userFiles = API.getUserFiles(user.id);
+    setFiles(userFiles);
+    
+    return true;
   };
 
   const logout = () => {
@@ -277,6 +323,7 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     markCodeAsUsed,
     currentUser,
     login,
+    loginWithProvider,
     logout,
     signup,
     userCount: users.length,

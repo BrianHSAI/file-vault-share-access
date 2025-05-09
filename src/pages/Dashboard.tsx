@@ -6,7 +6,7 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { useFiles } from "@/context/FileContext";
 import Navbar from "@/components/Navbar";
 import FileCard from "@/components/FileCard";
-import { Upload, RefreshCw, Users } from "lucide-react";
+import { Upload, RefreshCw, Users, Link } from "lucide-react";
 import { toast } from "sonner";
 
 const Dashboard: React.FC = () => {
@@ -61,6 +61,12 @@ const Dashboard: React.FC = () => {
               <RefreshCw className="h-4 w-4" />
               Synkroniser
             </Button>
+            <Button
+              onClick={() => navigate("/upload/link")}
+              className="bg-green-600 hover:bg-green-700 mr-2"
+            >
+              <Link className="mr-2 h-4 w-4" /> Del Link
+            </Button>
             <Button 
               onClick={() => navigate("/upload")}
               className="bg-blue-600 hover:bg-blue-700"
@@ -75,7 +81,13 @@ const Dashboard: React.FC = () => {
             <CardContent>
               <p className="text-slate-500 mb-4">Du har ikke uploadet nogen filer endnu.</p>
             </CardContent>
-            <CardFooter className="justify-center">
+            <CardFooter className="justify-center flex gap-4">
+              <Button
+                onClick={() => navigate("/upload/link")}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Link className="mr-2 h-4 w-4" /> Del Link
+              </Button>
               <Button 
                 onClick={() => navigate("/upload")}
                 className="bg-blue-600 hover:bg-blue-700"

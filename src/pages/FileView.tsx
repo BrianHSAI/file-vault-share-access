@@ -7,6 +7,7 @@ import Navbar from "@/components/Navbar";
 import { toast } from "sonner";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import AccessCodeInput from "@/components/AccessCodeInput";
+import { ExternalLink } from "lucide-react";
 
 const FileView: React.FC = () => {
   const { fileId } = useParams<{ fileId: string }>();
@@ -39,10 +40,35 @@ const FileView: React.FC = () => {
     }
   }, [fileId, getFileById, navigate, currentUser]);
 
+  const handleOpenLink = () => {
+    if (file?.type === "link" && file.content) {
+      window.open(file.content, "_blank");
+    }
+  };
+
   const renderFilePreview = () => {
     if (!file) return null;
 
-    if (file.type.startsWith("image/")) {
+    if (file.type === "link") {
+      return (
+        <div className="p-8 text-center bg-gray-50 rounded-md flex flex-col items-center">
+          <ExternalLink className="h-16 w-16 text-green-600 mb-4" />
+          <p className="text-lg font-medium">
+            Delt Link
+          </p>
+          <p className="text-gray-500 mt-2 mb-6">
+            {file.name}
+          </p>
+          <Button 
+            onClick={handleOpenLink}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            <ExternalLink className="mr-2 h-4 w-4" />
+            Åbn Link
+          </Button>
+        </div>
+      );
+    } else if (file.type.startsWith("image/")) {
       return (
         <div className="flex justify-center p-4 bg-white rounded-md">
           <img 
@@ -115,7 +141,7 @@ const FileView: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-slate-500 mb-4">
-                  Del disse adgangskoder med personer, du vil give adgang til denne fil. 
+                  Del disse adgangskoder med personer, du vil give adgang til denne {file.type === "link" ? "link" : "fil"}. 
                   Hver kode kan kun bruges én gang.
                 </p>
                 <AccessCodeInput 
