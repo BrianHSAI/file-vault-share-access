@@ -12,7 +12,6 @@ import Dashboard from "./pages/Dashboard";
 import FileUpload from "./pages/FileUpload";
 import FileView from "./pages/FileView";
 import AccessFile from "./pages/AccessFile";
-import LinkShare from "./pages/LinkShare";
 import { FileProvider } from "./context/FileContext";
 
 const queryClient = new QueryClient();
@@ -30,7 +29,6 @@ const App = () => (
             <Route path="/signup" element={<Signup />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/upload" element={<FileUpload />} />
-            <Route path="/upload/link" element={<LinkShare />} />
             <Route path="/file/:fileId" element={<FileView />} />
             <Route path="/access" element={<AccessFile />} />
             <Route path="*" element={<NotFound />} />

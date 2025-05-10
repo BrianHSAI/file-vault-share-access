@@ -12,7 +12,7 @@ export interface FileItem {
   uploadDate: string;
   size: string;
   accessCodes: AccessCode[];
-  content: string; // Base64 encoded file content or URL for links
+  content: string; // Base64 encoded file content
   type: string;
   ownerId: string;
 }
@@ -21,8 +21,6 @@ interface User {
   id: string;
   email: string;
   password: string;
-  provider?: string; // 'google', 'microsoft', or undefined for regular login
-  providerUserId?: string;
 }
 
 interface FileContextType {
@@ -32,20 +30,19 @@ interface FileContextType {
   getFileById: (id: string) => FileItem | undefined;
   getFileByAccessCode: (code: string, email: string) => FileItem | undefined;
   markCodeAsUsed: (fileId: string, code: string) => void;
-  currentUser: { id: string; email: string; provider?: string } | null;
+  currentUser: { id: string; email: string } | null;
   login: (email: string, password: string) => Promise<boolean>;
-  loginWithProvider: (provider: string, userData: { id: string, email: string }) => Promise<boolean>;
   logout: () => void;
   signup: (email: string, password: string) => Promise<boolean>;
   userCount: number;
   syncData: () => void;
 }
 
-// Mock server API
+// Simulated global database using sessionStorage for persistent cross-device access
 const API = {
   getUsers: (): User[] => {
     try {
-      const usersString = localStorage.getItem("global_users");
+      const usersString = sessionStorage.getItem("global_users");
       return usersString ? JSON.parse(usersString) : [];
     } catch (error) {
       console.error("Error retrieving users:", error);
@@ -55,7 +52,7 @@ const API = {
   
   saveUsers: (users: User[]): void => {
     try {
-      localStorage.setItem("global_users", JSON.stringify(users));
+      sessionStorage.setItem("global_users", JSON.stringify(users));
     } catch (error) {
       console.error("Error saving users:", error);
     }
@@ -63,7 +60,7 @@ const API = {
   
   getFiles: (): FileItem[] => {
     try {
-      const filesString = localStorage.getItem("global_files");
+      const filesString = sessionStorage.getItem("global_files");
       return filesString ? JSON.parse(filesString) : [];
     } catch (error) {
       console.error("Error retrieving files:", error);
@@ -73,7 +70,7 @@ const API = {
   
   saveFiles: (files: FileItem[]): void => {
     try {
-      localStorage.setItem("global_files", JSON.stringify(files));
+      sessionStorage.setItem("global_files", JSON.stringify(files));
     } catch (error) {
       console.error("Error saving files:", error);
     }
@@ -103,14 +100,14 @@ export const useFiles = () => {
 export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [currentUser, setCurrentUser] = useState<{ id: string; email: string; provider?: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; email: string } | null>(null);
 
   // Initial data load
   useEffect(() => {
     syncData();
     
     // Try to restore user session
-    const savedUserString = localStorage.getItem("current_session");
+    const savedUserString = sessionStorage.getItem("current_session");
     if (savedUserString) {
       try {
         const savedUser = JSON.parse(savedUserString);
@@ -229,12 +226,11 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (user) {
       const userSession = { 
         id: user.id, 
-        email: user.email,
-        provider: user.provider
+        email: user.email
       };
       
       setCurrentUser(userSession);
-      localStorage.setItem("current_session", JSON.stringify(userSession));
+      sessionStorage.setItem("current_session", JSON.stringify(userSession));
       
       // Load user files
       const userFiles = API.getUserFiles(user.id);
@@ -245,48 +241,10 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return false;
   };
 
-  const loginWithProvider = async (provider: string, userData: { id: string, email: string }): Promise<boolean> => {
-    const allUsers = API.getUsers();
-    let user = allUsers.find((u) => 
-      u.provider === provider && u.providerUserId === userData.id
-    );
-    
-    // If user doesn't exist with this provider, create a new one
-    if (!user) {
-      user = { 
-        id: `user-${Date.now()}`, 
-        email: userData.email,
-        password: "", // No password for social login
-        provider,
-        providerUserId: userData.id
-      };
-      
-      const updatedUsers = [...allUsers, user];
-      API.saveUsers(updatedUsers);
-      setUsers(updatedUsers);
-    }
-    
-    // Set user session
-    const userSession = { 
-      id: user.id, 
-      email: user.email,
-      provider: user.provider
-    };
-    
-    setCurrentUser(userSession);
-    localStorage.setItem("current_session", JSON.stringify(userSession));
-    
-    // Load user files
-    const userFiles = API.getUserFiles(user.id);
-    setFiles(userFiles);
-    
-    return true;
-  };
-
   const logout = () => {
     setCurrentUser(null);
     setFiles([]);
-    localStorage.removeItem("current_session");
+    sessionStorage.removeItem("current_session");
   };
 
   const signup = async (email: string, password: string): Promise<boolean> => {
@@ -309,7 +267,7 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Auto login
     const userSession = { id: newUser.id, email: newUser.email };
     setCurrentUser(userSession);
-    localStorage.setItem("current_session", JSON.stringify(userSession));
+    sessionStorage.setItem("current_session", JSON.stringify(userSession));
     
     return true;
   };
@@ -323,7 +281,6 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     markCodeAsUsed,
     currentUser,
     login,
-    loginWithProvider,
     logout,
     signup,
     userCount: users.length,

@@ -9,7 +9,7 @@ import { useFiles } from "@/context/FileContext";
 import Navbar from "@/components/Navbar";
 import { toast } from "sonner";
 import { FileItem } from "@/context/FileContext";
-import { Download, ExternalLink } from "lucide-react";
+import { Download } from "lucide-react";
 
 const AccessFile: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -56,12 +56,6 @@ const AccessFile: React.FC = () => {
     if (!accessedFile) return;
 
     try {
-      // If it's a link type, open the link in a new tab
-      if (accessedFile.type === "link") {
-        window.open(accessedFile.content, "_blank");
-        return;
-      }
-
       // For regular files
       const link = document.createElement('a');
       link.href = accessedFile.content;
@@ -86,7 +80,7 @@ const AccessFile: React.FC = () => {
             <div>
               <h1 className="text-2xl font-bold text-slate-900">{accessedFile.name}</h1>
               <p className="text-slate-500">
-                {accessedFile.type === "link" ? "Link delt" : "Uploadet"} {accessedFile.uploadDate} • {accessedFile.size}
+                Uploadet {accessedFile.uploadDate} • {accessedFile.size}
               </p>
             </div>
             <Button 
@@ -101,44 +95,21 @@ const AccessFile: React.FC = () => {
             <Card>
               <CardHeader>
                 <CardTitle className="text-center">
-                  {accessedFile.type === "link" ? "Link Tilgængeligt" : "Fil Tilgængelig"}
+                  Fil Tilgængelig
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col items-center gap-4 pt-4">
                 <div className="text-center mb-4">
-                  {accessedFile.type === "link" ? (
-                    <>
-                      <ExternalLink className="mx-auto h-12 w-12 text-green-500 mb-2" />
-                      <p className="text-lg mb-2">Dit link er klar</p>
-                      <p className="text-sm text-gray-500">{accessedFile.name}</p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-lg mb-2">Din fil er klar til download</p>
-                      <p className="text-sm text-gray-500">{accessedFile.name} ({accessedFile.type})</p>
-                      <p className="text-sm text-gray-500 mt-1">{accessedFile.size}</p>
-                    </>
-                  )}
+                  <p className="text-lg mb-2">Din fil er klar til download</p>
+                  <p className="text-sm text-gray-500">{accessedFile.name} ({accessedFile.type})</p>
+                  <p className="text-sm text-gray-500 mt-1">{accessedFile.size}</p>
                 </div>
                 <Button 
                   onClick={handleDownload} 
-                  className={`w-full flex items-center justify-center gap-2 ${
-                    accessedFile.type === "link" 
-                      ? "bg-green-600 hover:bg-green-700" 
-                      : "bg-blue-600 hover:bg-blue-700"
-                  }`}
+                  className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700"
                 >
-                  {accessedFile.type === "link" ? (
-                    <>
-                      <ExternalLink size={20} />
-                      Åbn Link
-                    </>
-                  ) : (
-                    <>
-                      <Download size={20} />
-                      Download Fil
-                    </>
-                  )}
+                  <Download size={20} />
+                  Download Fil
                 </Button>
               </CardContent>
               <CardFooter className="flex justify-center pt-4">
