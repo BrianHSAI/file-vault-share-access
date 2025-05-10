@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,15 +9,21 @@ import { useFiles } from "@/context/FileContext";
 import Navbar from "@/components/Navbar";
 import { toast } from "sonner";
 import { FileItem } from "@/context/FileContext";
-import { Download } from "lucide-react";
+import { Download, RefreshCw } from "lucide-react";
 
 const AccessFile: React.FC = () => {
   const [email, setEmail] = useState("");
   const [accessCode, setAccessCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [accessedFile, setAccessedFile] = useState<FileItem | null>(null);
   const navigate = useNavigate();
-  const { getFileByAccessCode, markCodeAsUsed } = useFiles();
+  const { getFileByAccessCode, markCodeAsUsed, syncData } = useFiles();
+
+  // Sync data when component mounts
+  useEffect(() => {
+    syncData();
+  }, [syncData]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,6 +36,9 @@ const AccessFile: React.FC = () => {
     setIsLoading(true);
     
     try {
+      // Sync data first to ensure we have the latest file info
+      syncData();
+      
       const file = getFileByAccessCode(accessCode, email);
       
       if (!file) {
@@ -49,6 +58,18 @@ const AccessFile: React.FC = () => {
       toast.error("Der opstod en fejl. Prøv igen senere.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSync = () => {
+    setIsSyncing(true);
+    try {
+      syncData();
+      toast.success("Data synkroniseret!");
+    } catch (error) {
+      toast.error("Synkronisering mislykkedes");
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -164,6 +185,19 @@ const AccessFile: React.FC = () => {
               >
                 {isLoading ? "Henter fil..." : "Få adgang"}
               </Button>
+              <div className="flex items-center justify-center w-full">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                  onClick={handleSync}
+                  disabled={isSyncing}
+                >
+                  <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                  Synkroniser data
+                </Button>
+              </div>
             </CardFooter>
           </form>
         </Card>

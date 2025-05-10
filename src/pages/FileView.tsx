@@ -7,18 +7,23 @@ import Navbar from "@/components/Navbar";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import AccessCodeInput from "@/components/AccessCodeInput";
+import { RefreshCw } from "lucide-react";
 
 const FileView: React.FC = () => {
   const { fileId } = useParams<{ fileId: string }>();
   const navigate = useNavigate();
-  const { getFileById, currentUser } = useFiles();
+  const { getFileById, currentUser, syncData } = useFiles();
   const [file, setFile] = useState(fileId ? getFileById(fileId) : undefined);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     if (!currentUser) {
       navigate("/login");
       return;
     }
+
+    // Sync data when component mounts to ensure we have the latest
+    syncData();
 
     if (fileId) {
       const foundFile = getFileById(fileId);
@@ -37,7 +42,28 @@ const FileView: React.FC = () => {
 
       setFile(foundFile);
     }
-  }, [fileId, getFileById, navigate, currentUser]);
+  }, [fileId, getFileById, navigate, currentUser, syncData]);
+
+  const handleSync = () => {
+    setIsSyncing(true);
+    try {
+      syncData();
+      
+      // Reload file data after sync
+      if (fileId) {
+        const foundFile = getFileById(fileId);
+        if (foundFile) {
+          setFile(foundFile);
+        }
+      }
+      
+      toast.success("Data synkroniseret!");
+    } catch (error) {
+      toast.error("Synkronisering mislykkedes");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const renderFilePreview = () => {
     if (!file) return null;
@@ -91,12 +117,24 @@ const FileView: React.FC = () => {
               Uploadet {file.uploadDate} • {file.size}
             </p>
           </div>
-          <Button 
-            variant="ghost" 
-            onClick={() => navigate("/dashboard")}
-          >
-            Tilbage til Dashboard
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2"
+              onClick={handleSync}
+              disabled={isSyncing}
+            >
+              <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+              Synkroniser
+            </Button>
+            <Button 
+              variant="ghost" 
+              onClick={() => navigate("/dashboard")}
+            >
+              Tilbage til Dashboard
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

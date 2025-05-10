@@ -20,7 +20,10 @@ const Dashboard: React.FC = () => {
     if (!currentUser) {
       navigate("/login");
     }
-  }, [currentUser, navigate]);
+    
+    // Sync data when dashboard loads to ensure we have the most up-to-date information
+    syncData();
+  }, [currentUser, navigate, syncData]);
 
   const handleDelete = (fileId: string) => {
     deleteFile(fileId);
