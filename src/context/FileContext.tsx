@@ -41,21 +41,32 @@ interface FileContextType {
   syncData: () => Promise<void>;
 }
 
-// Firebase configuration (this would need real values)
+// Firebase configuration with demo-mode configuration
+// Using demo mode to allow the app to function without real Firebase credentials
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "your-project.firebaseapp.com",
-  projectId: "your-project",
-  storageBucket: "your-project.appspot.com",
-  messagingSenderId: "your-messaging-sender-id",
-  appId: "your-app-id"
+  apiKey: "demo-mode",
+  authDomain: "demo-mode",
+  projectId: "demo-mode",
+  storageBucket: "demo-mode",
+  messagingSenderId: "demo-mode",
+  appId: "demo-mode"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
+// Initialize Firebase in demo mode
+let auth;
+let db;
+let storage;
+let app;
+
+try {
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+  storage = getStorage(app);
+} catch (error) {
+  console.error("Firebase initialization error:", error);
+  // Continue with mock implementations
+}
 
 const FileContext = createContext<FileContextType | undefined>(undefined);
 
@@ -67,25 +78,44 @@ export const useFiles = () => {
   return context;
 };
 
+// In-memory storage for demo mode
+const inMemoryUsers: { id: string; email: string; password: string }[] = [];
+const inMemoryFiles: FileItem[] = [];
+
 export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [userCount, setUserCount] = useState<number>(0);
   const [currentUser, setCurrentUser] = useState<{ id: string; email: string } | null>(null);
 
-  // Monitor auth state
+  // Monitor auth state - using demo mode if Firebase fails
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setCurrentUser({
-          id: user.uid,
-          email: user.email || ""
-        });
-      } else {
-        setCurrentUser(null);
+    const demoAuthCheck = localStorage.getItem('demoCurrentUser');
+    if (demoAuthCheck) {
+      try {
+        const parsedUser = JSON.parse(demoAuthCheck);
+        setCurrentUser(parsedUser);
+      } catch (e) {
+        console.error("Error parsing demo user:", e);
       }
-    });
-
-    return () => unsubscribe();
+    }
+    
+    // Only use Firebase auth if not in demo mode
+    if (auth) {
+      const unsubscribe = onAuthStateChanged(auth, (user) => {
+        if (user) {
+          setCurrentUser({
+            id: user.uid,
+            email: user.email || ""
+          });
+        } else {
+          setCurrentUser(null);
+        }
+      });
+  
+      return () => unsubscribe();
+    }
+    
+    return () => {};
   }, []);
 
   // Sync data when current user changes
@@ -101,12 +131,24 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Create a memoized version of syncData to prevent infinite loops
   const syncData = useCallback(async () => {
     try {
-      // Get users count
+      // Demo mode for users count
+      if (!db) {
+        setUserCount(inMemoryUsers.length);
+        
+        if (currentUser) {
+          // Get user files from in-memory storage
+          const userFiles = inMemoryFiles.filter(file => file.ownerId === currentUser.id);
+          setFiles(userFiles);
+        }
+        return;
+      }
+      
+      // Get users count from Firebase
       const usersSnapshot = await getDocs(collection(db, "users"));
       setUserCount(usersSnapshot.size);
       
       if (currentUser) {
-        // Get user files
+        // Get user files from Firebase
         const filesQuery = query(
           collection(db, "files"),
           where("ownerId", "==", currentUser.id)
@@ -128,7 +170,14 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const addFile = async (file: FileItem) => {
     try {
-      // Upload file content to Storage
+      // Demo mode - store in memory
+      if (!db || !storage) {
+        inMemoryFiles.push(file);
+        setFiles([...inMemoryFiles.filter(f => f.ownerId === currentUser?.id)]);
+        return;
+      }
+      
+      // Upload file content to Firebase Storage
       const storageRef = ref(storage, `files/${file.id}`);
       await uploadString(storageRef, file.content, 'data_url');
       
@@ -153,6 +202,17 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const deleteFile = async (id: string) => {
     try {
+      // Demo mode - delete from memory
+      if (!db) {
+        const fileIndex = inMemoryFiles.findIndex(file => file.id === id);
+        if (fileIndex !== -1) {
+          inMemoryFiles.splice(fileIndex, 1);
+          setFiles([...inMemoryFiles.filter(f => f.ownerId === currentUser?.id)]);
+        }
+        return;
+      }
+      
+      // Delete from Firebase
       await deleteDoc(doc(db, "files", id));
       
       // Update local state
@@ -164,6 +224,12 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const getFileById = useCallback(async (id: string) => {
     try {
+      // Demo mode - get from memory
+      if (!db) {
+        return inMemoryFiles.find(file => file.id === id);
+      }
+      
+      // Get from Firebase
       const docRef = doc(db, "files", id);
       const docSnap = await getDocs(collection(db, "files"));
       
@@ -184,7 +250,14 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const getFileByAccessCode = useCallback(async (code: string, email: string) => {
     try {
-      // Query files to find one with matching access code
+      // Demo mode - get from memory
+      if (!db) {
+        return inMemoryFiles.find(file => 
+          file.accessCodes.some(ac => ac.code === code && !ac.used)
+        );
+      }
+      
+      // Get from Firebase
       const filesSnapshot = await getDocs(collection(db, "files"));
       let foundFile: FileItem | undefined;
       
@@ -206,7 +279,23 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const markCodeAsUsed = async (fileId: string, code: string) => {
     try {
-      // Get the file document
+      // Demo mode - mark in memory
+      if (!db) {
+        const fileIndex = inMemoryFiles.findIndex(file => file.id === fileId);
+        if (fileIndex !== -1) {
+          const updatedAccessCodes = inMemoryFiles[fileIndex].accessCodes.map(ac => 
+            ac.code === code ? { ...ac, used: true } : ac
+          );
+          inMemoryFiles[fileIndex] = {
+            ...inMemoryFiles[fileIndex],
+            accessCodes: updatedAccessCodes
+          };
+          setFiles([...inMemoryFiles.filter(f => f.ownerId === currentUser?.id)]);
+        }
+        return;
+      }
+      
+      // Mark in Firebase
       const docRef = doc(db, "files", fileId);
       const docSnap = await getDocs(collection(db, "files"));
       
@@ -239,6 +328,34 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signup = async (email: string, password: string) => {
     try {
+      // Check if user already exists in demo mode
+      const existingUser = inMemoryUsers.find(user => user.email === email);
+      if (existingUser) {
+        return false;
+      }
+      
+      // Demo mode - create in memory
+      if (!auth || !db) {
+        const newUser = {
+          id: `demo-${Date.now()}`,
+          email,
+          password
+        };
+        
+        inMemoryUsers.push(newUser);
+        setCurrentUser({
+          id: newUser.id,
+          email: newUser.email
+        });
+        
+        localStorage.setItem('demoCurrentUser', JSON.stringify({
+          id: newUser.id,
+          email: newUser.email
+        }));
+        
+        return true;
+      }
+      
       // Create user in Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
@@ -258,6 +375,26 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (email: string, password: string) => {
     try {
+      // Demo mode - log in from memory
+      if (!auth) {
+        const user = inMemoryUsers.find(u => u.email === email && u.password === password);
+        if (user) {
+          setCurrentUser({
+            id: user.id,
+            email: user.email
+          });
+          
+          localStorage.setItem('demoCurrentUser', JSON.stringify({
+            id: user.id,
+            email: user.email
+          }));
+          
+          return true;
+        }
+        return false;
+      }
+      
+      // Log in with Firebase
       await signInWithEmailAndPassword(auth, email, password);
       return true;
     } catch (error) {
@@ -268,6 +405,15 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = async () => {
     try {
+      // Demo mode - log out from memory
+      if (!auth) {
+        setCurrentUser(null);
+        localStorage.removeItem('demoCurrentUser');
+        setFiles([]);
+        return;
+      }
+      
+      // Log out from Firebase
       await signOut(auth);
       setFiles([]);
     } catch (error) {
