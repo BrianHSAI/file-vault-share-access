@@ -42,7 +42,8 @@ const FileView: React.FC = () => {
 
       setFile(foundFile);
     }
-  }, [fileId, getFileById, navigate, currentUser, syncData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileId, getFileById, navigate, currentUser]); // Remove syncData from dependency array
 
   const handleSync = () => {
     setIsSyncing(true);

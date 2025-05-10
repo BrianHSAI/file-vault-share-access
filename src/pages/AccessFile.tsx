@@ -23,7 +23,8 @@ const AccessFile: React.FC = () => {
   // Sync data when component mounts
   useEffect(() => {
     syncData();
-  }, [syncData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Remove syncData from dependency array
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

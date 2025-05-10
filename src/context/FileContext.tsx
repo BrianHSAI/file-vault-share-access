@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from "react";
 
 export interface AccessCode {
   code: string;
@@ -102,29 +102,36 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<{ id: string; email: string } | null>(null);
 
+  // Create a memoized version of syncData to prevent infinite loops
+  const syncData = useCallback(() => {
+    const fetchedUsers = API.getUsers();
+    setUsers(fetchedUsers);
+    
+    if (currentUser) {
+      const userFiles = API.getUserFiles(currentUser.id);
+      setFiles(userFiles);
+    }
+  }, [currentUser]);
+
   // Initial data load
   useEffect(() => {
-    syncData();
-    
     // Try to restore user session
     const savedUserString = sessionStorage.getItem("current_session");
     if (savedUserString) {
       try {
         const savedUser = JSON.parse(savedUserString);
         setCurrentUser(savedUser);
-        
-        // Load user files
-        if (savedUser && savedUser.id) {
-          const userFiles = API.getUserFiles(savedUser.id);
-          setFiles(userFiles);
-        }
       } catch (error) {
         console.error("Error restoring session:", error);
       }
     }
+
+    // Load initial data
+    const fetchedUsers = API.getUsers();
+    setUsers(fetchedUsers);
   }, []);
 
-  // Sync data between devices and update UI when current user changes
+  // Sync data when current user changes
   useEffect(() => {
     if (currentUser) {
       const userFiles = API.getUserFiles(currentUser.id);
@@ -133,16 +140,6 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setFiles([]);
     }
   }, [currentUser]);
-
-  const syncData = () => {
-    const fetchedUsers = API.getUsers();
-    setUsers(fetchedUsers);
-    
-    if (currentUser) {
-      const userFiles = API.getUserFiles(currentUser.id);
-      setFiles(userFiles);
-    }
-  };
 
   const addFile = (file: FileItem) => {
     try {
@@ -177,19 +174,19 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const getFileById = (id: string) => {
+  const getFileById = useCallback((id: string) => {
     const allFiles = API.getFiles();
     return allFiles.find((file) => file.id === id);
-  };
+  }, []);
 
-  const getFileByAccessCode = (code: string, email: string) => {
+  const getFileByAccessCode = useCallback((code: string, email: string) => {
     const allFiles = API.getFiles();
     return allFiles.find((file) => 
       file.accessCodes.some(accessCode => 
         accessCode.code === code && !accessCode.used
       )
     );
-  };
+  }, []);
 
   const markCodeAsUsed = (fileId: string, code: string) => {
     try {

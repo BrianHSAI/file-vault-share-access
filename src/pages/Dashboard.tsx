@@ -19,11 +19,14 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     if (!currentUser) {
       navigate("/login");
+      return;
     }
     
-    // Sync data when dashboard loads to ensure we have the most up-to-date information
+    // We'll only sync data once when the component mounts, not on every render
+    // or when syncData changes (which causes the infinite loop)
     syncData();
-  }, [currentUser, navigate, syncData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, navigate]); // Remove syncData from the dependency array
 
   const handleDelete = (fileId: string) => {
     deleteFile(fileId);
