@@ -1,5 +1,5 @@
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -12,6 +12,7 @@ import { toast } from "sonner";
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { files, currentUser, deleteFile, syncData, userCount } = useFiles();
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Filter files by current user
   const userFiles = files.filter(file => file.ownerId === currentUser?.id);
@@ -22,22 +23,37 @@ const Dashboard: React.FC = () => {
       return;
     }
     
-    // We'll only sync data once when the component mounts, not on every render
-    // or when syncData changes (which causes the infinite loop)
-    syncData();
+    // Initial data loading
+    const initialSync = async () => {
+      try {
+        await syncData();
+      } catch (error) {
+        console.error("Error syncing data:", error);
+      }
+    };
+    
+    initialSync();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, navigate]); // Remove syncData from the dependency array
+  }, [currentUser, navigate]);
 
-  const handleDelete = (fileId: string) => {
-    deleteFile(fileId);
+  const handleDelete = async (fileId: string) => {
+    try {
+      await deleteFile(fileId);
+      toast.success("Fil slettet!");
+    } catch (error) {
+      toast.error("Der opstod en fejl ved sletning af filen");
+    }
   };
 
-  const handleSync = () => {
+  const handleSync = async () => {
+    setIsSyncing(true);
     try {
-      syncData();
+      await syncData();
       toast.success("Data synkroniseret!");
     } catch (error) {
       toast.error("Synkronisering mislykkedes");
+    } finally {
+      setIsSyncing(false);
     }
   };
 

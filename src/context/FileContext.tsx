@@ -1,5 +1,9 @@
 
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from "react";
+import { initializeApp } from "firebase/app";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
+import { getFirestore, collection, addDoc, getDocs, doc, deleteDoc, updateDoc, query, where } from "firebase/firestore";
+import { getStorage, ref, uploadString, getDownloadURL } from "firebase/storage";
 
 export interface AccessCode {
   code: string;
@@ -12,7 +16,7 @@ export interface FileItem {
   uploadDate: string;
   size: string;
   accessCodes: AccessCode[];
-  content: string; // Base64 encoded file content
+  content: string; // Base64 encoded file content or URL to cloud storage
   type: string;
   ownerId: string;
 }
@@ -20,72 +24,38 @@ export interface FileItem {
 interface User {
   id: string;
   email: string;
-  password: string;
 }
 
 interface FileContextType {
   files: FileItem[];
   addFile: (file: FileItem) => void;
   deleteFile: (id: string) => void;
-  getFileById: (id: string) => FileItem | undefined;
-  getFileByAccessCode: (code: string, email: string) => FileItem | undefined;
+  getFileById: (id: string) => Promise<FileItem | undefined>;
+  getFileByAccessCode: (code: string, email: string) => Promise<FileItem | undefined>;
   markCodeAsUsed: (fileId: string, code: string) => void;
   currentUser: { id: string; email: string } | null;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   signup: (email: string, password: string) => Promise<boolean>;
   userCount: number;
-  syncData: () => void;
+  syncData: () => Promise<void>;
 }
 
-// Simulated global database using sessionStorage for persistent cross-device access
-const API = {
-  getUsers: (): User[] => {
-    try {
-      const usersString = sessionStorage.getItem("global_users");
-      return usersString ? JSON.parse(usersString) : [];
-    } catch (error) {
-      console.error("Error retrieving users:", error);
-      return [];
-    }
-  },
-  
-  saveUsers: (users: User[]): void => {
-    try {
-      sessionStorage.setItem("global_users", JSON.stringify(users));
-    } catch (error) {
-      console.error("Error saving users:", error);
-    }
-  },
-  
-  getFiles: (): FileItem[] => {
-    try {
-      const filesString = sessionStorage.getItem("global_files");
-      return filesString ? JSON.parse(filesString) : [];
-    } catch (error) {
-      console.error("Error retrieving files:", error);
-      return [];
-    }
-  },
-  
-  saveFiles: (files: FileItem[]): void => {
-    try {
-      sessionStorage.setItem("global_files", JSON.stringify(files));
-    } catch (error) {
-      console.error("Error saving files:", error);
-    }
-  },
-
-  getUserFiles: (userId: string): FileItem[] => {
-    try {
-      const allFiles = API.getFiles();
-      return allFiles.filter(file => file.ownerId === userId);
-    } catch (error) {
-      console.error("Error retrieving user files:", error);
-      return [];
-    }
-  }
+// Firebase configuration (this would need real values)
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "your-project.firebaseapp.com",
+  projectId: "your-project",
+  storageBucket: "your-project.appspot.com",
+  messagingSenderId: "your-messaging-sender-id",
+  appId: "your-app-id"
 };
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
 
 const FileContext = createContext<FileContextType | undefined>(undefined);
 
@@ -99,174 +69,210 @@ export const useFiles = () => {
 
 export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [files, setFiles] = useState<FileItem[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [userCount, setUserCount] = useState<number>(0);
   const [currentUser, setCurrentUser] = useState<{ id: string; email: string } | null>(null);
 
-  // Create a memoized version of syncData to prevent infinite loops
-  const syncData = useCallback(() => {
-    const fetchedUsers = API.getUsers();
-    setUsers(fetchedUsers);
-    
-    if (currentUser) {
-      const userFiles = API.getUserFiles(currentUser.id);
-      setFiles(userFiles);
-    }
-  }, [currentUser]);
-
-  // Initial data load
+  // Monitor auth state
   useEffect(() => {
-    // Try to restore user session
-    const savedUserString = sessionStorage.getItem("current_session");
-    if (savedUserString) {
-      try {
-        const savedUser = JSON.parse(savedUserString);
-        setCurrentUser(savedUser);
-      } catch (error) {
-        console.error("Error restoring session:", error);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setCurrentUser({
+          id: user.uid,
+          email: user.email || ""
+        });
+      } else {
+        setCurrentUser(null);
       }
-    }
+    });
 
-    // Load initial data
-    const fetchedUsers = API.getUsers();
-    setUsers(fetchedUsers);
+    return () => unsubscribe();
   }, []);
 
   // Sync data when current user changes
   useEffect(() => {
     if (currentUser) {
-      const userFiles = API.getUserFiles(currentUser.id);
-      setFiles(userFiles);
+      syncData();
     } else {
       setFiles([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
-  const addFile = (file: FileItem) => {
+  // Create a memoized version of syncData to prevent infinite loops
+  const syncData = useCallback(async () => {
     try {
-      const allFiles = API.getFiles();
-      const newFiles = [...allFiles, file];
-      API.saveFiles(newFiles);
+      // Get users count
+      const usersSnapshot = await getDocs(collection(db, "users"));
+      setUserCount(usersSnapshot.size);
       
-      // Update local state with only user's files
       if (currentUser) {
-        const updatedUserFiles = API.getUserFiles(currentUser.id);
-        setFiles(updatedUserFiles);
+        // Get user files
+        const filesQuery = query(
+          collection(db, "files"),
+          where("ownerId", "==", currentUser.id)
+        );
+        
+        const filesSnapshot = await getDocs(filesQuery);
+        const fetchedFiles: FileItem[] = [];
+        
+        filesSnapshot.forEach((doc) => {
+          fetchedFiles.push({ id: doc.id, ...doc.data() } as FileItem);
+        });
+        
+        setFiles(fetchedFiles);
       }
     } catch (error) {
-      console.error("Error storing files:", error);
+      console.error("Error syncing data:", error);
+    }
+  }, [currentUser]);
+
+  const addFile = async (file: FileItem) => {
+    try {
+      // Upload file content to Storage
+      const storageRef = ref(storage, `files/${file.id}`);
+      await uploadString(storageRef, file.content, 'data_url');
+      
+      // Get URL for the uploaded file
+      const fileUrl = await getDownloadURL(storageRef);
+      
+      // Save file metadata to Firestore
+      const fileData = {
+        ...file,
+        content: fileUrl, // Store URL instead of base64
+      };
+      
+      await addDoc(collection(db, "files"), fileData);
+      
+      // Update local state
+      await syncData();
+    } catch (error) {
+      console.error("Error storing file:", error);
       throw error;
     }
   };
 
-  const deleteFile = (id: string) => {
+  const deleteFile = async (id: string) => {
     try {
-      const allFiles = API.getFiles();
-      const newFiles = allFiles.filter((file) => file.id !== id);
-      API.saveFiles(newFiles);
+      await deleteDoc(doc(db, "files", id));
       
       // Update local state
-      if (currentUser) {
-        const updatedUserFiles = API.getUserFiles(currentUser.id);
-        setFiles(updatedUserFiles);
-      }
+      setFiles(prevFiles => prevFiles.filter(file => file.id !== id));
     } catch (error) {
       console.error("Error deleting file:", error);
     }
   };
 
-  const getFileById = useCallback((id: string) => {
-    const allFiles = API.getFiles();
-    return allFiles.find((file) => file.id === id);
-  }, []);
-
-  const getFileByAccessCode = useCallback((code: string, email: string) => {
-    const allFiles = API.getFiles();
-    return allFiles.find((file) => 
-      file.accessCodes.some(accessCode => 
-        accessCode.code === code && !accessCode.used
-      )
-    );
-  }, []);
-
-  const markCodeAsUsed = (fileId: string, code: string) => {
+  const getFileById = useCallback(async (id: string) => {
     try {
-      const allFiles = API.getFiles();
-      const newFiles = allFiles.map((file) => {
-        if (file.id === fileId) {
-          const newAccessCodes = file.accessCodes.map((accessCode) => {
-            if (accessCode.code === code) {
-              return { ...accessCode, used: true };
-            }
-            return accessCode;
-          });
-          return { ...file, accessCodes: newAccessCodes };
+      const docRef = doc(db, "files", id);
+      const docSnap = await getDocs(collection(db, "files"));
+      
+      let foundFile: FileItem | undefined;
+      
+      docSnap.forEach((doc) => {
+        if (doc.id === id) {
+          foundFile = { id: doc.id, ...doc.data() } as FileItem;
         }
-        return file;
       });
       
-      API.saveFiles(newFiles);
+      return foundFile;
+    } catch (error) {
+      console.error("Error getting file by ID:", error);
+      return undefined;
+    }
+  }, []);
+
+  const getFileByAccessCode = useCallback(async (code: string, email: string) => {
+    try {
+      // Query files to find one with matching access code
+      const filesSnapshot = await getDocs(collection(db, "files"));
+      let foundFile: FileItem | undefined;
       
-      // Update local state if necessary
-      if (currentUser) {
-        const updatedUserFiles = API.getUserFiles(currentUser.id);
-        setFiles(updatedUserFiles);
+      filesSnapshot.forEach((doc) => {
+        const fileData = doc.data() as Omit<FileItem, "id">;
+        const accessCodes = fileData.accessCodes || [];
+        
+        if (accessCodes.some(ac => ac.code === code && !ac.used)) {
+          foundFile = { id: doc.id, ...fileData } as FileItem;
+        }
+      });
+      
+      return foundFile;
+    } catch (error) {
+      console.error("Error getting file by access code:", error);
+      return undefined;
+    }
+  }, []);
+
+  const markCodeAsUsed = async (fileId: string, code: string) => {
+    try {
+      // Get the file document
+      const docRef = doc(db, "files", fileId);
+      const docSnap = await getDocs(collection(db, "files"));
+      
+      let foundFile: FileItem | undefined;
+      
+      docSnap.forEach((doc) => {
+        if (doc.id === fileId) {
+          foundFile = { id: doc.id, ...doc.data() } as FileItem;
+        }
+      });
+      
+      if (foundFile) {
+        // Update the access code to mark as used
+        const updatedAccessCodes = foundFile.accessCodes.map(ac => 
+          ac.code === code ? { ...ac, used: true } : ac
+        );
+        
+        // Update the document
+        await updateDoc(docRef, {
+          accessCodes: updatedAccessCodes
+        });
+        
+        // Update local state
+        await syncData();
       }
     } catch (error) {
-      console.error("Error updating code status:", error);
+      console.error("Error marking code as used:", error);
     }
   };
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    const allUsers = API.getUsers();
-    const user = allUsers.find((u) => u.email === email && u.password === password);
-    
-    if (user) {
-      const userSession = { 
-        id: user.id, 
+  const signup = async (email: string, password: string) => {
+    try {
+      // Create user in Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      
+      // Add user to Firestore
+      await addDoc(collection(db, "users"), {
+        uid: user.uid,
         email: user.email
-      };
-      
-      setCurrentUser(userSession);
-      sessionStorage.setItem("current_session", JSON.stringify(userSession));
-      
-      // Load user files
-      const userFiles = API.getUserFiles(user.id);
-      setFiles(userFiles);
+      });
       
       return true;
-    }
-    return false;
-  };
-
-  const logout = () => {
-    setCurrentUser(null);
-    setFiles([]);
-    sessionStorage.removeItem("current_session");
-  };
-
-  const signup = async (email: string, password: string): Promise<boolean> => {
-    const allUsers = API.getUsers();
-    const userExists = allUsers.some((u) => u.email === email);
-    
-    if (userExists) {
+    } catch (error) {
+      console.error("Error signing up:", error);
       return false;
     }
-    
-    const newUser = { id: `user-${Date.now()}`, email, password };
-    const updatedUsers = [...allUsers, newUser];
-    
-    // Save to "server"
-    API.saveUsers(updatedUsers);
-    
-    // Update local state
-    setUsers(updatedUsers);
-    
-    // Auto login
-    const userSession = { id: newUser.id, email: newUser.email };
-    setCurrentUser(userSession);
-    sessionStorage.setItem("current_session", JSON.stringify(userSession));
-    
-    return true;
+  };
+
+  const login = async (email: string, password: string) => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      return true;
+    } catch (error) {
+      console.error("Error logging in:", error);
+      return false;
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await signOut(auth);
+      setFiles([]);
+    } catch (error) {
+      console.error("Error logging out:", error);
+    }
   };
 
   const value = {
@@ -280,7 +286,7 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     login,
     logout,
     signup,
-    userCount: users.length,
+    userCount,
     syncData
   };
 

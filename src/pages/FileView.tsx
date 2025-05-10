@@ -13,7 +13,7 @@ const FileView: React.FC = () => {
   const { fileId } = useParams<{ fileId: string }>();
   const navigate = useNavigate();
   const { getFileById, currentUser, syncData } = useFiles();
-  const [file, setFile] = useState(fileId ? getFileById(fileId) : undefined);
+  const [file, setFile] = useState<any>(undefined);
   const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
@@ -22,37 +22,47 @@ const FileView: React.FC = () => {
       return;
     }
 
-    // Sync data when component mounts to ensure we have the latest
-    syncData();
+    // Function to fetch file data
+    const fetchFileData = async () => {
+      try {
+        // Sync data when component mounts to ensure we have the latest
+        await syncData();
 
-    if (fileId) {
-      const foundFile = getFileById(fileId);
-      if (!foundFile) {
-        toast.error("Filen blev ikke fundet");
-        navigate("/dashboard");
-        return;
+        if (fileId) {
+          const foundFile = await getFileById(fileId);
+          if (!foundFile) {
+            toast.error("Filen blev ikke fundet");
+            navigate("/dashboard");
+            return;
+          }
+
+          // Check if user owns this file
+          if (foundFile.ownerId !== currentUser.id) {
+            toast.error("Du har ikke adgang til denne fil");
+            navigate("/dashboard");
+            return;
+          }
+
+          setFile(foundFile);
+        }
+      } catch (error) {
+        console.error("Error fetching file data:", error);
+        toast.error("Der opstod en fejl ved hentning af filen");
       }
+    };
 
-      // Check if user owns this file
-      if (foundFile.ownerId !== currentUser.id) {
-        toast.error("Du har ikke adgang til denne fil");
-        navigate("/dashboard");
-        return;
-      }
-
-      setFile(foundFile);
-    }
+    fetchFileData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileId, getFileById, navigate, currentUser]); // Remove syncData from dependency array
+  }, [fileId, navigate, currentUser]);
 
-  const handleSync = () => {
+  const handleSync = async () => {
     setIsSyncing(true);
     try {
-      syncData();
+      await syncData();
       
       // Reload file data after sync
       if (fileId) {
-        const foundFile = getFileById(fileId);
+        const foundFile = await getFileById(fileId);
         if (foundFile) {
           setFile(foundFile);
         }

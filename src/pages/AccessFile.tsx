@@ -22,11 +22,19 @@ const AccessFile: React.FC = () => {
 
   // Sync data when component mounts
   useEffect(() => {
-    syncData();
+    const initialSync = async () => {
+      try {
+        await syncData();
+      } catch (error) {
+        console.error("Error syncing data:", error);
+      }
+    };
+    
+    initialSync();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Remove syncData from dependency array
+  }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!email || !accessCode) {
@@ -38,9 +46,9 @@ const AccessFile: React.FC = () => {
     
     try {
       // Sync data first to ensure we have the latest file info
-      syncData();
+      await syncData();
       
-      const file = getFileByAccessCode(accessCode, email);
+      const file = await getFileByAccessCode(accessCode, email);
       
       if (!file) {
         toast.error("Ugyldig adgangskode eller email");
@@ -49,7 +57,7 @@ const AccessFile: React.FC = () => {
       }
 
       // Mark code as used
-      markCodeAsUsed(file.id, accessCode);
+      await markCodeAsUsed(file.id, accessCode);
       
       // Show the file
       setAccessedFile(file);
@@ -62,10 +70,10 @@ const AccessFile: React.FC = () => {
     }
   };
 
-  const handleSync = () => {
+  const handleSync = async () => {
     setIsSyncing(true);
     try {
-      syncData();
+      await syncData();
       toast.success("Data synkroniseret!");
     } catch (error) {
       toast.error("Synkronisering mislykkedes");
